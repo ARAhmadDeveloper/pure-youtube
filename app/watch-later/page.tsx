@@ -1,34 +1,15 @@
-import { createClient } from "@/lib/supabase/server"
-import { redirect } from "next/navigation"
-import { Header } from "@/components/header"
-import { AnimatedSidebar } from "@/components/animated-sidebar"
 import { WatchLaterGrid } from "@/components/watch-later-grid"
+import { Clock } from "lucide-react"
 
-export default async function WatchLaterPage() {
-  const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-
-  if (!user) {
-    redirect("/auth/signin")
-  }
-
+export default function WatchLaterPage() {
   return (
-    <div className="min-h-screen bg-background">
-      <Header />
-      <div className="flex">
-        <AnimatedSidebar />
-        <main className="flex-1 p-6">
-          <div className="max-w-7xl mx-auto">
-            <div className="mb-8">
-              <h1 className="text-3xl font-bold text-foreground mb-2">Watch Later</h1>
-              <p className="text-muted-foreground">Videos you've saved to watch later</p>
-            </div>
-            <WatchLaterGrid />
-          </div>
-        </main>
+    <div className="container mx-auto px-4 py-6">
+      <div className="flex items-center gap-3 mb-6">
+        <Clock className="w-6 h-6" />
+        <h1 className="text-2xl font-bold">Watch Later</h1>
       </div>
+
+      <WatchLaterGrid />
     </div>
   )
 }
