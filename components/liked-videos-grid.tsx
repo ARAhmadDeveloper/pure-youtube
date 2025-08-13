@@ -1,13 +1,12 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useEffect, useState } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { LikedVideoCard } from "./liked-video-card"
-import { Button } from "@/components/ui/button"
-import { Loader2, Heart } from "lucide-react"
-import { useToast } from "@/hooks/use-toast"
+import { Skeleton } from "@/components/ui/skeleton"
+import { Heart } from "lucide-react"
 
-interface LikedVideo {
+interface Video {
   id: string
   title: string
   description: string
@@ -15,14 +14,22 @@ interface LikedVideo {
   video_url: string
   duration: number
   views: number
-  likes: number
-  comment_count: number
   created_at: string
   user_id: string
-  username: string
-  full_name: string
-  avatar_url: string
-  liked_at: string
+  profiles: {
+    id: string
+    username: string
+    full_name: string
+    avatar_url: string
+  }
+}
+
+interface LikedVideo {
+  id: string
+  video_id: string
+  user_id: string
+  created_at: string
+  videos: Video
 }
 
 interface LikedVideosGridProps {
@@ -30,129 +37,174 @@ interface LikedVideosGridProps {
 }
 
 export function LikedVideosGrid({ userId }: LikedVideosGridProps) {
-  const [videos, setVideos] = useState<LikedVideo[]>([])
+  const [likedVideos, setLikedVideos] = useState<LikedVideo[]>([])
   const [loading, setLoading] = useState(true)
-  const [loadingMore, setLoadingMore] = useState(false)
-  const [hasMore, setHasMore] = useState(true)
-  const [page, setPage] = useState(0)
-  const { toast } = useToast()
+  const [error, setError] = useState<string | null>(null)
   const supabase = createClient()
-
-  const VIDEOS_PER_PAGE = 12
 
   useEffect(() => {
     fetchLikedVideos()
   }, [userId])
 
-  const fetchLikedVideos = async (pageNum = 0, append = false) => {
+  const fetchLikedVideos = async () => {
     try {
-      if (pageNum === 0) {
-        setLoading(true)
-      } else {
-        setLoadingMore(true)
-      }
+      setLoading(true)
+      setError(null)
 
-      const { data, error } = await supabase.rpc("get_liked_videos", {
-        user_uuid: userId,
-        page_limit: VIDEOS_PER_PAGE,
-        page_offset: pageNum * VIDEOS_PER_PAGE,
-      })
+      // First, get the liked video IDs
+      const { data: likedData, error: likedError } = await supabase
+        .from("video_likes")
+        .select("video_id, created_at")
+        .eq("user_id", userId)
+        .eq("is_like", true)
+        .order("created_at", { ascending: false })
 
-      if (error) {
-        console.error("Error fetching liked videos:", error)
-        toast({
-          title: "Error",
-          description: "Failed to load liked videos",
-          variant: "destructive",
-        })
+      if (likedError) {
+        console.error("Error fetching liked videos:", likedError)
+        setError("Failed to fetch liked videos")
         return
       }
 
-      const likedVideos = data || []
-
-      if (append) {
-        setVideos((prev) => [...prev, ...likedVideos])
-      } else {
-        setVideos(likedVideos)
+      if (!likedData || likedData.length === 0) {
+        setLikedVideos([])
+        return
       }
 
-      setHasMore(likedVideos.length === VIDEOS_PER_PAGE)
-      setPage(pageNum)
-    } catch (error) {
-      console.error("Error fetching liked videos:", error)
-      toast({
-        title: "Error",
-        description: "Failed to load liked videos",
-        variant: "destructive",
-      })
+      // Get the video IDs
+      const videoIds = likedData.map((like) => like.video_id)
+
+      // Fetch the actual video data
+      const { data: videosData, error: videosError } = await supabase
+        .from("videos")
+        .select(
+          `
+          id,
+          title,
+          description,
+          thumbnail_url,
+          video_url,
+          duration,
+          views,
+          created_at,
+          user_id,
+          profiles:user_id (
+            id,
+            username,
+            full_name,
+            avatar_url
+          )
+        `,
+        )
+        .in("id", videoIds)
+
+      if (videosError) {
+        console.error("Error fetching videos:", videosError)
+        setError("Failed to fetch video details")
+        return
+      }
+
+      // Combine the data
+      const combinedData = likedData
+        .map((like) => {
+          const video = videosData?.find((v) => v.id === like.video_id)
+          if (!video) return null
+          return {
+            id: `${userId}-${like.video_id}`,
+            video_id: like.video_id,
+            user_id: userId,
+            created_at: like.created_at,
+            videos: video,
+          }
+        })
+        .filter(Boolean) as LikedVideo[]
+
+      setLikedVideos(combinedData)
+    } catch (err) {
+      console.error("Error in fetchLikedVideos:", err)
+      setError("An unexpected error occurred")
     } finally {
       setLoading(false)
-      setLoadingMore(false)
     }
   }
 
-  const handleLoadMore = () => {
-    if (!loadingMore && hasMore) {
-      fetchLikedVideos(page + 1, true)
-    }
-  }
+  const handleUnlike = async (videoId: string) => {
+    try {
+      const { error } = await supabase.from("video_likes").delete().eq("user_id", userId).eq("video_id", videoId)
 
-  const handleVideoUnliked = (videoId: string) => {
-    setVideos((prev) => prev.filter((video) => video.id !== videoId))
-    toast({
-      title: "Video unliked",
-      description: "Video removed from your liked videos",
-    })
+      if (error) {
+        console.error("Error unliking video:", error)
+        return
+      }
+
+      // Remove from local state
+      setLikedVideos((prev) => prev.filter((video) => video.video_id !== videoId))
+    } catch (err) {
+      console.error("Error in handleUnlike:", err)
+    }
   }
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-[400px]">
-        <div className="flex items-center space-x-2">
-          <Loader2 className="w-6 h-6 animate-spin" />
-          <span>Loading liked videos...</span>
-        </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+        {Array.from({ length: 8 }).map((_, i) => (
+          <div key={i} className="space-y-3">
+            <Skeleton className="aspect-video w-full rounded-lg" />
+            <div className="space-y-2">
+              <Skeleton className="h-4 w-full" />
+              <Skeleton className="h-3 w-2/3" />
+              <Skeleton className="h-3 w-1/2" />
+            </div>
+          </div>
+        ))}
       </div>
     )
   }
 
-  if (videos.length === 0) {
+  if (error) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[400px] text-center">
-        <Heart className="w-16 h-16 text-muted-foreground mb-4" />
-        <h3 className="text-xl font-semibold text-foreground mb-2">No liked videos yet</h3>
-        <p className="text-muted-foreground mb-6 max-w-md">
-          Start exploring and like videos to see them here. Your liked videos will be saved for easy access later.
+      <div className="text-center py-12">
+        <div className="text-red-500 mb-4">
+          <Heart className="mx-auto h-12 w-12 mb-2" />
+          <p className="text-lg font-medium">Error loading liked videos</p>
+          <p className="text-sm text-muted-foreground">{error}</p>
+        </div>
+        <button
+          onClick={fetchLikedVideos}
+          className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
+        >
+          Try Again
+        </button>
+      </div>
+    )
+  }
+
+  if (likedVideos.length === 0) {
+    return (
+      <div className="text-center py-12">
+        <Heart className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
+        <h3 className="text-lg font-medium mb-2">No liked videos yet</h3>
+        <p className="text-muted-foreground mb-6">
+          Videos you like will appear here. Start exploring and like some videos!
         </p>
-        <Button asChild>
-          <a href="/">Discover Videos</a>
-        </Button>
+        <a
+          href="/"
+          className="inline-flex items-center px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
+        >
+          Explore Videos
+        </a>
       </div>
     )
   }
 
   return (
-    <div className="space-y-6">
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-        {videos.map((video) => (
-          <LikedVideoCard key={video.id} video={video} onUnlike={handleVideoUnliked} />
-        ))}
-      </div>
-
-      {hasMore && (
-        <div className="flex justify-center pt-8">
-          <Button onClick={handleLoadMore} disabled={loadingMore} variant="outline" size="lg">
-            {loadingMore ? (
-              <>
-                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                Loading more...
-              </>
-            ) : (
-              "Load More Videos"
-            )}
-          </Button>
-        </div>
-      )}
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+      {likedVideos.map((likedVideo) => (
+        <LikedVideoCard
+          key={likedVideo.id}
+          video={likedVideo.videos}
+          onUnlike={() => handleUnlike(likedVideo.video_id)}
+        />
+      ))}
     </div>
   )
 }

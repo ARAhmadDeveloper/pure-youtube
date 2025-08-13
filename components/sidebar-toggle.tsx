@@ -11,6 +11,7 @@ interface SidebarToggleProps {
   variant?: "menu" | "chevron" | "hamburger"
   size?: "sm" | "md" | "lg"
   position?: "header" | "sidebar" | "floating"
+  sidebarId?: string
 }
 
 export function SidebarToggle({
@@ -19,6 +20,7 @@ export function SidebarToggle({
   variant = "hamburger",
   size = "md",
   position = "header",
+  sidebarId = "sidebar",
 }: SidebarToggleProps) {
   const [isAnimating, setIsAnimating] = useState(false)
 
@@ -59,6 +61,8 @@ export function SidebarToggle({
           isAnimating && "scale-95",
         )}
         aria-label={isOpen ? "Close sidebar" : "Open sidebar"}
+        aria-expanded={isOpen}
+        aria-controls={sidebarId}
       >
         <div className="relative">
           {/* Hamburger Menu Animation */}
