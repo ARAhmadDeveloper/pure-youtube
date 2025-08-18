@@ -10,20 +10,26 @@ interface Video {
   video_url: string
   duration: number
   views: number
+  likes: number
+  comment_count: number
   created_at: string
   user_id: string
   profiles: {
+    id: string
     username: string
     avatar_url: string
   }
 }
 
 interface VideoGridProps {
-  videos: Video[]
+  videos?: Video[]
 }
 
-export function VideoGrid({ videos }: VideoGridProps) {
-  if (!videos.length) {
+export function VideoGrid({ videos = [] }: VideoGridProps) {
+  // Handle undefined or null videos
+  const safeVideos = videos || []
+
+  if (!safeVideos.length) {
     return (
       <div className="flex flex-col items-center justify-center py-12">
         <div className="text-center">
@@ -36,7 +42,7 @@ export function VideoGrid({ videos }: VideoGridProps) {
 
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-      {videos.map((video) => (
+      {safeVideos.map((video) => (
         <VideoCard key={video.id} video={video} />
       ))}
     </div>

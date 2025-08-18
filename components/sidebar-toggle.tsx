@@ -1,6 +1,5 @@
 "use client"
 
-import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Menu, X, ChevronLeft, ChevronRight } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -8,44 +7,46 @@ import { cn } from "@/lib/utils"
 interface SidebarToggleProps {
   isOpen: boolean
   onToggle: () => void
-  variant?: "menu" | "chevron" | "hamburger"
-  size?: "sm" | "md" | "lg"
+  variant?: "hamburger" | "chevron" | "menu"
   position?: "header" | "sidebar" | "floating"
-  sidebarId?: string
+  className?: string
 }
 
 export function SidebarToggle({
   isOpen,
   onToggle,
   variant = "hamburger",
-  size = "md",
   position = "header",
-  sidebarId = "sidebar",
+  className,
 }: SidebarToggleProps) {
-  const [isAnimating, setIsAnimating] = useState(false)
-
   const handleToggle = () => {
-    setIsAnimating(true)
     onToggle()
-    setTimeout(() => setIsAnimating(false), 300)
   }
 
-  const sizeClasses = {
-    sm: "h-8 w-8",
-    md: "h-10 w-10",
-    lg: "h-12 w-12",
+  const getIcon = () => {
+    switch (variant) {
+      case "hamburger":
+        return isOpen ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />
+      case "chevron":
+        return isOpen ? <ChevronLeft className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />
+      case "menu":
+        return <Menu className="h-4 w-4" />
+      default:
+        return <Menu className="h-4 w-4" />
+    }
   }
 
-  const iconSizes = {
-    sm: "w-4 h-4",
-    md: "w-5 h-5",
-    lg: "w-6 h-6",
-  }
-
-  const positionClasses = {
-    header: "relative",
-    sidebar: "absolute -right-3 top-4 z-50 bg-background border shadow-md",
-    floating: "fixed top-4 left-4 z-50 bg-background/80 backdrop-blur-sm border shadow-lg",
+  const getPositionStyles = () => {
+    switch (position) {
+      case "header":
+        return "relative"
+      case "sidebar":
+        return "absolute -right-3 top-4 bg-white shadow-lg border border-gray-200 hover:shadow-xl"
+      case "floating":
+        return "fixed top-4 left-4 z-50 bg-white/80 backdrop-blur-sm shadow-lg border border-gray-200 hover:shadow-xl"
+      default:
+        return "relative"
+    }
   }
 
   if (variant === "hamburger") {
@@ -54,42 +55,12 @@ export function SidebarToggle({
         variant="ghost"
         size="icon"
         onClick={handleToggle}
-        className={cn(
-          sizeClasses[size],
-          positionClasses[position],
-          "group relative overflow-hidden transition-all duration-300 hover:bg-accent",
-          isAnimating && "scale-95",
-        )}
+        className={cn("transition-all duration-200", getPositionStyles(), isOpen && "bg-gray-100", className)}
         aria-label={isOpen ? "Close sidebar" : "Open sidebar"}
         aria-expanded={isOpen}
-        aria-controls={sidebarId}
+        aria-controls="sidebar"
       >
-        <div className="relative">
-          {/* Hamburger Menu Animation */}
-          <div className={cn("flex flex-col justify-center items-center", iconSizes[size])}>
-            <span
-              className={cn(
-                "block h-0.5 w-5 bg-current transition-all duration-300 ease-in-out",
-                isOpen ? "rotate-45 translate-y-1" : "-translate-y-1",
-              )}
-            />
-            <span
-              className={cn(
-                "block h-0.5 w-5 bg-current transition-all duration-300 ease-in-out my-1",
-                isOpen ? "opacity-0" : "opacity-100",
-              )}
-            />
-            <span
-              className={cn(
-                "block h-0.5 w-5 bg-current transition-all duration-300 ease-in-out",
-                isOpen ? "-rotate-45 -translate-y-1" : "translate-y-1",
-              )}
-            />
-          </div>
-
-          {/* Ripple Effect */}
-          <div className="absolute inset-0 rounded-full bg-primary/20 scale-0 group-hover:scale-100 transition-transform duration-300" />
-        </div>
+        {getIcon()}
       </Button>
     )
   }
@@ -100,67 +71,27 @@ export function SidebarToggle({
         variant="ghost"
         size="icon"
         onClick={handleToggle}
-        className={cn(
-          sizeClasses[size],
-          positionClasses[position],
-          "group relative overflow-hidden transition-all duration-300 hover:bg-accent rounded-full",
-          isAnimating && "scale-95",
-        )}
-        aria-label={isOpen ? "Close sidebar" : "Open sidebar"}
+        className={cn("transition-all duration-200 rounded-full", getPositionStyles(), className)}
+        aria-label={isOpen ? "Collapse sidebar" : "Expand sidebar"}
+        aria-expanded={isOpen}
+        aria-controls="sidebar"
       >
-        <div className="relative">
-          {/* Chevron Animation */}
-          <div className={cn("transition-transform duration-300", isOpen ? "rotate-180" : "rotate-0")}>
-            {isOpen ? (
-              <ChevronLeft className={cn(iconSizes[size], "transition-all duration-300")} />
-            ) : (
-              <ChevronRight className={cn(iconSizes[size], "transition-all duration-300")} />
-            )}
-          </div>
-
-          {/* Background Pulse */}
-          <div className="absolute inset-0 rounded-full bg-gradient-to-r from-purple-500/20 to-pink-500/20 scale-0 group-hover:scale-100 transition-transform duration-500" />
-        </div>
+        {getIcon()}
       </Button>
     )
   }
 
-  // Menu variant (default)
   return (
     <Button
       variant="ghost"
       size="icon"
       onClick={handleToggle}
-      className={cn(
-        sizeClasses[size],
-        positionClasses[position],
-        "group relative overflow-hidden transition-all duration-300 hover:bg-accent",
-        isAnimating && "scale-95",
-      )}
-      aria-label={isOpen ? "Close sidebar" : "Open sidebar"}
+      className={cn("transition-all duration-200", getPositionStyles(), className)}
+      aria-label="Toggle sidebar"
+      aria-expanded={isOpen}
+      aria-controls="sidebar"
     >
-      <div className="relative">
-        {/* Icon Transition */}
-        <div className="relative">
-          <Menu
-            className={cn(
-              iconSizes[size],
-              "absolute transition-all duration-300 ease-in-out",
-              isOpen ? "rotate-90 opacity-0 scale-75" : "rotate-0 opacity-100 scale-100",
-            )}
-          />
-          <X
-            className={cn(
-              iconSizes[size],
-              "absolute transition-all duration-300 ease-in-out",
-              isOpen ? "rotate-0 opacity-100 scale-100" : "-rotate-90 opacity-0 scale-75",
-            )}
-          />
-        </div>
-
-        {/* Glow Effect */}
-        <div className="absolute inset-0 rounded-md bg-gradient-to-r from-blue-500/20 to-purple-500/20 scale-0 group-hover:scale-100 transition-transform duration-400" />
-      </div>
+      {getIcon()}
     </Button>
   )
 }

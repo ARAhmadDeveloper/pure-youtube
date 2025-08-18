@@ -1,205 +1,95 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { Home, TrendingUp, Heart, Clock, Users, Settings, HelpCircle, History } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import { SidebarToggle } from "./sidebar-toggle"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
-import {
-  Home,
-  TrendingUp,
-  Clock,
-  ThumbsUp,
-  Users,
-  Search,
-  Upload,
-  Video,
-  Settings,
-  HelpCircle,
-  User,
-} from "lucide-react"
-
-const sidebarItems = [
-  {
-    title: "Home",
-    href: "/",
-    icon: Home,
-  },
-  {
-    title: "Trending",
-    href: "/trending",
-    icon: TrendingUp,
-  },
-  {
-    title: "Search",
-    href: "/search",
-    icon: Search,
-  },
-]
-
-const libraryItems = [
-  {
-    title: "My Videos",
-    href: "/my-videos",
-    icon: Video,
-  },
-  {
-    title: "Liked Videos",
-    href: "/liked",
-    icon: ThumbsUp,
-  },
-  {
-    title: "Watch Later",
-    href: "/watch-later",
-    icon: Clock,
-  },
-  {
-    title: "Subscriptions",
-    href: "/subscriptions",
-    icon: Users,
-  },
-]
-
-const otherItems = [
-  {
-    title: "Upload",
-    href: "/upload",
-    icon: Upload,
-  },
-  {
-    title: "Profile",
-    href: "/profile",
-    icon: User,
-  },
-  {
-    title: "Settings",
-    href: "/settings",
-    icon: Settings,
-  },
-  {
-    title: "Help",
-    href: "/help",
-    icon: HelpCircle,
-  },
-]
 
 interface SidebarProps {
-  className?: string
+  isOpen: boolean
+  onToggle: () => void
 }
 
-export function Sidebar({ className }: SidebarProps) {
+const navigationItems = [
+  { icon: Home, label: "Home", href: "/" },
+  { icon: TrendingUp, label: "Trending", href: "/trending" },
+  { icon: Heart, label: "Liked Videos", href: "/liked" },
+  { icon: Clock, label: "Watch Later", href: "/watch-later" },
+  { icon: Users, label: "Subscriptions", href: "/subscriptions" },
+  { icon: History, label: "History", href: "/history" },
+]
+
+const bottomItems = [
+  { icon: Settings, label: "Settings", href: "/settings" },
+  { icon: HelpCircle, label: "Help", href: "/help" },
+]
+
+export function Sidebar({ isOpen, onToggle }: SidebarProps) {
   const pathname = usePathname()
-  const [currentUser, setCurrentUser] = useState<any>(null)
-
-  // Check session storage for current user
-  useEffect(() => {
-    const checkUser = () => {
-      try {
-        const storedUser = sessionStorage.getItem("videome_user")
-        if (storedUser) {
-          setCurrentUser(JSON.parse(storedUser))
-        }
-      } catch (error) {
-        console.error("Error parsing stored user:", error)
-      }
-    }
-
-    checkUser()
-
-    // Listen for storage changes
-    const handleStorageChange = () => {
-      checkUser()
-    }
-
-    window.addEventListener("storage", handleStorageChange)
-    return () => window.removeEventListener("storage", handleStorageChange)
-  }, [])
 
   return (
-    <div className={cn("pb-12 w-64", className)}>
-      <div className="space-y-4 py-4">
-        {/* Main Navigation */}
-        <div className="px-3 py-2">
-          <div className="space-y-1">
-            {sidebarItems.map((item) => (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={cn(
-                  "flex items-center rounded-lg px-3 py-2 text-sm font-medium hover:bg-gray-100 hover:text-gray-900",
-                  pathname === item.href ? "bg-gray-100 text-gray-900" : "text-gray-600",
-                )}
-              >
-                <item.icon className="mr-3 h-5 w-5" />
-                {item.title}
-              </Link>
-            ))}
-          </div>
-        </div>
+    <aside
+      id="sidebar"
+      className={cn(
+        "relative w-64 h-full bg-white border-r border-gray-200 transition-all duration-300",
+        "flex flex-col",
+      )}
+    >
+      {/* Sidebar toggle button on the edge */}
+      <SidebarToggle isOpen={isOpen} onToggle={onToggle} variant="chevron" position="sidebar" />
 
-        {/* Library Section - Only show if user is signed in */}
-        {currentUser && (
-          <div className="px-3 py-2">
-            <h2 className="mb-2 px-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Library</h2>
-            <div className="space-y-1">
-              {libraryItems.map((item) => (
-                <Link
-                  key={item.href}
-                  href={item.href}
+      {/* Navigation */}
+      <nav className="flex-1 px-4 py-6">
+        <div className="space-y-2">
+          {navigationItems.map((item) => {
+            const Icon = item.icon
+            const isActive = pathname === item.href
+
+            return (
+              <Link key={item.href} href={item.href}>
+                <Button
+                  variant={isActive ? "secondary" : "ghost"}
                   className={cn(
-                    "flex items-center rounded-lg px-3 py-2 text-sm font-medium hover:bg-gray-100 hover:text-gray-900",
-                    pathname === item.href ? "bg-gray-100 text-gray-900" : "text-gray-600",
+                    "w-full justify-start gap-3 h-10",
+                    isActive && "bg-red-50 text-red-600 hover:bg-red-100",
                   )}
                 >
-                  <item.icon className="mr-3 h-5 w-5" />
-                  {item.title}
-                </Link>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Other Items */}
-        <div className="px-3 py-2">
-          <h2 className="mb-2 px-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">More</h2>
-          <div className="space-y-1">
-            {otherItems.map((item) => {
-              // Only show upload and profile if user is signed in
-              if ((item.href === "/upload" || item.href === "/profile") && !currentUser) {
-                return null
-              }
-
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className={cn(
-                    "flex items-center rounded-lg px-3 py-2 text-sm font-medium hover:bg-gray-100 hover:text-gray-900",
-                    pathname === item.href ? "bg-gray-100 text-gray-900" : "text-gray-600",
-                  )}
-                >
-                  <item.icon className="mr-3 h-5 w-5" />
-                  {item.title}
-                </Link>
-              )
-            })}
-          </div>
+                  <Icon className="h-5 w-5" />
+                  {item.label}
+                </Button>
+              </Link>
+            )
+          })}
         </div>
 
-        {/* Sign in prompt for non-authenticated users */}
-        {!currentUser && (
-          <div className="px-3 py-2">
-            <div className="bg-gray-50 rounded-lg p-4">
-              <p className="text-sm text-gray-600 mb-3">Sign in to access your library, upload videos, and more.</p>
-              <Link
-                href="/auth/signin"
-                className="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground hover:bg-primary/90 h-9 px-3"
-              >
-                Sign In
+        {/* Divider */}
+        <div className="my-6 border-t border-gray-200" />
+
+        {/* Bottom items */}
+        <div className="space-y-2">
+          {bottomItems.map((item) => {
+            const Icon = item.icon
+            const isActive = pathname === item.href
+
+            return (
+              <Link key={item.href} href={item.href}>
+                <Button
+                  variant={isActive ? "secondary" : "ghost"}
+                  className={cn(
+                    "w-full justify-start gap-3 h-10",
+                    isActive && "bg-red-50 text-red-600 hover:bg-red-100",
+                  )}
+                >
+                  <Icon className="h-5 w-5" />
+                  {item.label}
+                </Button>
               </Link>
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
+            )
+          })}
+        </div>
+      </nav>
+    </aside>
   )
 }

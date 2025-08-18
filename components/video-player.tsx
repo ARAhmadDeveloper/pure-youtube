@@ -1,25 +1,25 @@
 "use client"
 
-import { useRef, useState, useEffect } from "react"
+import { useState, useRef, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Slider } from "@/components/ui/slider"
-import { cn } from "@/lib/utils"
-import { Play, Pause, Volume2, VolumeX, Maximize, Minimize, SkipBack, SkipForward, Download } from "lucide-react"
-import { useToast } from "@/hooks/use-toast"
+import { Card } from "@/components/ui/card"
+import { Play, Pause, Volume2, VolumeX, Maximize, Minimize, Download, AlertCircle } from "lucide-react"
+import { toast } from "sonner"
 
 interface VideoPlayerProps {
-  video: {
+  video?: {
     id: string
     title: string
     video_url: string
     thumbnail_url: string
-    duration: number
   }
+  videoUrl?: string
+  thumbnailUrl?: string
+  title?: string
 }
 
-export function VideoPlayer({ video }: VideoPlayerProps) {
-  const videoRef = useRef<HTMLVideoElement>(null)
-  const containerRef = useRef<HTMLDivElement>(null)
+export function VideoPlayer({ video, videoUrl, thumbnailUrl, title }: VideoPlayerProps) {
   const [isPlaying, setIsPlaying] = useState(false)
   const [currentTime, setCurrentTime] = useState(0)
   const [duration, setDuration] = useState(0)
@@ -28,173 +28,127 @@ export function VideoPlayer({ video }: VideoPlayerProps) {
   const [isFullscreen, setIsFullscreen] = useState(false)
   const [showControls, setShowControls] = useState(true)
   const [isLoading, setIsLoading] = useState(true)
-  const [playbackRate, setPlaybackRate] = useState(1)
-  const [isDownloading, setIsDownloading] = useState(false)
-  const { toast } = useToast()
+  const [error, setError] = useState<string | null>(null)
+
+  const videoRef = useRef<HTMLVideoElement>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
+  const controlsTimeoutRef = useRef<NodeJS.Timeout>()
+
+  // Get video URL from either prop format
+  const finalVideoUrl = video?.video_url || videoUrl
+  const finalThumbnailUrl = video?.thumbnail_url || thumbnailUrl
+  const finalTitle = video?.title || title || "Video"
 
   useEffect(() => {
-    const video = videoRef.current
-    if (!video) return
+    if (!finalVideoUrl) {
+      setError("Video URL is missing")
+      setIsLoading(false)
+      return
+    }
 
-    const updateTime = () => setCurrentTime(video.currentTime)
-    const updateDuration = () => {
-      setDuration(video.duration)
+    const videoElement = videoRef.current
+    if (!videoElement) return
+
+    const handleLoadedMetadata = () => {
+      setDuration(videoElement.duration)
+      setIsLoading(false)
+      setError(null)
+    }
+
+    const handleTimeUpdate = () => {
+      setCurrentTime(videoElement.currentTime)
+    }
+
+    const handleError = () => {
+      setError("Failed to load video")
       setIsLoading(false)
     }
-    const handleLoadStart = () => setIsLoading(true)
-    const handleCanPlay = () => setIsLoading(false)
 
-    video.addEventListener("timeupdate", updateTime)
-    video.addEventListener("loadedmetadata", updateDuration)
-    video.addEventListener("loadstart", handleLoadStart)
-    video.addEventListener("canplay", handleCanPlay)
+    const handleLoadStart = () => {
+      setIsLoading(true)
+      setError(null)
+    }
+
+    videoElement.addEventListener("loadedmetadata", handleLoadedMetadata)
+    videoElement.addEventListener("timeupdate", handleTimeUpdate)
+    videoElement.addEventListener("error", handleError)
+    videoElement.addEventListener("loadstart", handleLoadStart)
 
     return () => {
-      video.removeEventListener("timeupdate", updateTime)
-      video.removeEventListener("loadedmetadata", updateDuration)
-      video.removeEventListener("loadstart", handleLoadStart)
-      video.removeEventListener("canplay", handleCanPlay)
+      videoElement.removeEventListener("loadedmetadata", handleLoadedMetadata)
+      videoElement.removeEventListener("timeupdate", handleTimeUpdate)
+      videoElement.removeEventListener("error", handleError)
+      videoElement.removeEventListener("loadstart", handleLoadStart)
     }
-  }, [])
-
-  useEffect(() => {
-    const handleFullscreenChange = () => {
-      setIsFullscreen(!!document.fullscreenElement)
-    }
-
-    document.addEventListener("fullscreenchange", handleFullscreenChange)
-    return () => document.removeEventListener("fullscreenchange", handleFullscreenChange)
-  }, [])
-
-  useEffect(() => {
-    let timeout: NodeJS.Timeout
-    if (showControls) {
-      timeout = setTimeout(() => setShowControls(false), 3000)
-    }
-    return () => clearTimeout(timeout)
-  }, [showControls])
+  }, [finalVideoUrl])
 
   const togglePlay = () => {
-    const video = videoRef.current
-    if (!video) return
+    if (!videoRef.current) return
 
     if (isPlaying) {
-      video.pause()
+      videoRef.current.pause()
     } else {
-      video.play()
+      videoRef.current.play()
     }
     setIsPlaying(!isPlaying)
   }
 
   const handleSeek = (value: number[]) => {
-    const video = videoRef.current
-    if (!video) return
-
+    if (!videoRef.current) return
     const newTime = (value[0] / 100) * duration
-    video.currentTime = newTime
+    videoRef.current.currentTime = newTime
     setCurrentTime(newTime)
   }
 
   const handleVolumeChange = (value: number[]) => {
-    const video = videoRef.current
-    if (!video) return
-
+    if (!videoRef.current) return
     const newVolume = value[0] / 100
-    video.volume = newVolume
+    videoRef.current.volume = newVolume
     setVolume(newVolume)
     setIsMuted(newVolume === 0)
   }
 
   const toggleMute = () => {
-    const video = videoRef.current
-    if (!video) return
+    if (!videoRef.current) return
 
     if (isMuted) {
-      video.volume = volume
+      videoRef.current.volume = volume
       setIsMuted(false)
     } else {
-      video.volume = 0
+      videoRef.current.volume = 0
       setIsMuted(true)
     }
   }
 
-  const toggleFullscreen = async () => {
-    const container = containerRef.current
-    if (!container) return
+  const toggleFullscreen = () => {
+    if (!containerRef.current) return
 
-    try {
-      if (isFullscreen) {
-        await document.exitFullscreen()
-      } else {
-        await container.requestFullscreen()
-      }
-    } catch (error) {
-      console.error("Fullscreen error:", error)
+    if (!isFullscreen) {
+      containerRef.current.requestFullscreen()
+      setIsFullscreen(true)
+    } else {
+      document.exitFullscreen()
+      setIsFullscreen(false)
     }
   }
 
-  const skip = (seconds: number) => {
-    const video = videoRef.current
-    if (!video) return
-
-    video.currentTime = Math.max(0, Math.min(duration, video.currentTime + seconds))
-  }
-
-  const changePlaybackRate = (rate: number) => {
-    const video = videoRef.current
-    if (!video) return
-
-    video.playbackRate = rate
-    setPlaybackRate(rate)
-  }
-
   const handleDownload = async () => {
-    if (isDownloading) return
-
-    setIsDownloading(true)
+    if (!finalVideoUrl) return
 
     try {
-      // Create a safe filename from the video title
-      const safeTitle = video.title.replace(/[^a-z0-9]/gi, "_").toLowerCase()
-      const filename = `${safeTitle}.mp4`
-
-      // Fetch the video file
-      const response = await fetch(video.video_url)
-
-      if (!response.ok) {
-        throw new Error("Failed to fetch video")
-      }
-
-      // Get the blob
+      const response = await fetch(finalVideoUrl)
       const blob = await response.blob()
-
-      // Create download link
       const url = window.URL.createObjectURL(blob)
-      const link = document.createElement("a")
-      link.href = url
-      link.download = filename
-
-      // Trigger download
-      document.body.appendChild(link)
-      link.click()
-
-      // Cleanup
-      document.body.removeChild(link)
+      const a = document.createElement("a")
+      a.href = url
+      a.download = `${finalTitle}.mp4`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
       window.URL.revokeObjectURL(url)
-
-      toast({
-        title: "Download started",
-        description: "Your video download has begun.",
-      })
+      toast.success("Download started")
     } catch (error) {
-      console.error("Download error:", error)
-      toast({
-        title: "Download failed",
-        description: "Unable to download the video. Please try again.",
-        variant: "destructive",
-      })
-    } finally {
-      setIsDownloading(false)
+      toast.error("Failed to download video")
     }
   }
 
@@ -204,142 +158,105 @@ export function VideoPlayer({ video }: VideoPlayerProps) {
     return `${minutes}:${seconds.toString().padStart(2, "0")}`
   }
 
-  const progress = duration > 0 ? (currentTime / duration) * 100 : 0
+  const handleMouseMove = () => {
+    setShowControls(true)
+    if (controlsTimeoutRef.current) {
+      clearTimeout(controlsTimeoutRef.current)
+    }
+    controlsTimeoutRef.current = setTimeout(() => {
+      if (isPlaying) {
+        setShowControls(false)
+      }
+    }, 3000)
+  }
+
+  if (!finalVideoUrl) {
+    return (
+      <Card className="aspect-video flex items-center justify-center bg-muted">
+        <div className="text-center">
+          <AlertCircle className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+          <p className="text-muted-foreground">Video URL is missing</p>
+        </div>
+      </Card>
+    )
+  }
+
+  if (error) {
+    return (
+      <Card className="aspect-video flex items-center justify-center bg-muted">
+        <div className="text-center">
+          <AlertCircle className="h-12 w-12 text-destructive mx-auto mb-4" />
+          <p className="text-destructive">{error}</p>
+        </div>
+      </Card>
+    )
+  }
 
   return (
     <div
       ref={containerRef}
-      className={cn(
-        "relative bg-black rounded-lg overflow-hidden group",
-        isFullscreen ? "w-screen h-screen" : "aspect-video",
-      )}
-      onMouseMove={() => setShowControls(true)}
-      onMouseLeave={() => setShowControls(false)}
+      className="relative aspect-video bg-black rounded-lg overflow-hidden group"
+      onMouseMove={handleMouseMove}
+      onMouseLeave={() => isPlaying && setShowControls(false)}
     >
-      {/* Video Element */}
       <video
         ref={videoRef}
-        src={video.video_url}
-        poster={video.thumbnail_url}
-        className="w-full h-full object-contain cursor-pointer"
+        src={finalVideoUrl}
+        poster={finalThumbnailUrl}
+        className="w-full h-full object-contain"
         onClick={togglePlay}
-        onPlay={() => setIsPlaying(true)}
-        onPause={() => setIsPlaying(false)}
-        crossOrigin="anonymous"
       />
 
-      {/* Loading Spinner */}
       {isLoading && (
         <div className="absolute inset-0 flex items-center justify-center bg-black/50">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white"></div>
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white"></div>
         </div>
       )}
 
-      {/* Play/Pause Overlay */}
-      <div
-        className={cn(
-          "absolute inset-0 flex items-center justify-center transition-opacity duration-200",
-          showControls ? "opacity-100" : "opacity-0",
-        )}
-      >
-        <Button
-          variant="ghost"
-          size="lg"
-          onClick={togglePlay}
-          className="bg-black/50 hover:bg-black/70 text-white rounded-full p-4"
-        >
-          {isPlaying ? <Pause className="w-8 h-8" /> : <Play className="w-8 h-8 ml-1" />}
-        </Button>
-      </div>
-
       {/* Controls */}
       <div
-        className={cn(
-          "absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-4 transition-opacity duration-200",
-          showControls ? "opacity-100" : "opacity-0",
-        )}
+        className={`absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-4 transition-opacity duration-300 ${
+          showControls ? "opacity-100" : "opacity-0"
+        }`}
       >
         {/* Progress Bar */}
         <div className="mb-4">
-          <Slider value={[progress]} onValueChange={handleSeek} max={100} step={0.1} className="w-full" />
+          <Slider
+            value={[duration > 0 ? (currentTime / duration) * 100 : 0]}
+            onValueChange={handleSeek}
+            max={100}
+            step={0.1}
+            className="w-full"
+          />
+          <div className="flex justify-between text-xs text-white mt-1">
+            <span>{formatTime(currentTime)}</span>
+            <span>{formatTime(duration)}</span>
+          </div>
         </div>
 
         {/* Control Buttons */}
         <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-2">
-            {/* Play/Pause */}
-            <Button variant="ghost" size="sm" onClick={togglePlay} className="text-white hover:bg-white/20">
-              {isPlaying ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5" />}
+          <div className="flex items-center gap-2">
+            <Button variant="ghost" size="icon" onClick={togglePlay} className="text-white hover:bg-white/20">
+              {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
             </Button>
 
-            {/* Skip Buttons */}
-            <Button variant="ghost" size="sm" onClick={() => skip(-10)} className="text-white hover:bg-white/20">
-              <SkipBack className="w-5 h-5" />
-            </Button>
-
-            <Button variant="ghost" size="sm" onClick={() => skip(10)} className="text-white hover:bg-white/20">
-              <SkipForward className="w-5 h-5" />
-            </Button>
-
-            {/* Volume */}
-            <div className="flex items-center space-x-2">
-              <Button variant="ghost" size="sm" onClick={toggleMute} className="text-white hover:bg-white/20">
-                {isMuted ? <VolumeX className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />}
+            <div className="flex items-center gap-2">
+              <Button variant="ghost" size="icon" onClick={toggleMute} className="text-white hover:bg-white/20">
+                {isMuted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
               </Button>
-
               <div className="w-20">
                 <Slider value={[isMuted ? 0 : volume * 100]} onValueChange={handleVolumeChange} max={100} step={1} />
               </div>
             </div>
-
-            {/* Time Display */}
-            <span className="text-white text-sm">
-              {formatTime(currentTime)} / {formatTime(duration)}
-            </span>
           </div>
 
-          <div className="flex items-center space-x-2">
-            {/* Playback Speed */}
-            <select
-              value={playbackRate}
-              onChange={(e) => changePlaybackRate(Number(e.target.value))}
-              className="bg-transparent text-white text-sm border border-white/20 rounded px-2 py-1"
-            >
-              <option value={0.5} className="text-black">
-                0.5x
-              </option>
-              <option value={0.75} className="text-black">
-                0.75x
-              </option>
-              <option value={1} className="text-black">
-                1x
-              </option>
-              <option value={1.25} className="text-black">
-                1.25x
-              </option>
-              <option value={1.5} className="text-black">
-                1.5x
-              </option>
-              <option value={2} className="text-black">
-                2x
-              </option>
-            </select>
-
-            {/* Download */}
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleDownload}
-              disabled={isDownloading}
-              className="text-white hover:bg-white/20"
-              title="Download video"
-            >
-              <Download className={cn("w-5 h-5", isDownloading && "animate-spin")} />
+          <div className="flex items-center gap-2">
+            <Button variant="ghost" size="icon" onClick={handleDownload} className="text-white hover:bg-white/20">
+              <Download className="h-4 w-4" />
             </Button>
-
-            {/* Fullscreen */}
-            <Button variant="ghost" size="sm" onClick={toggleFullscreen} className="text-white hover:bg-white/20">
-              {isFullscreen ? <Minimize className="w-5 h-5" /> : <Maximize className="w-5 h-5" />}
+            <Button variant="ghost" size="icon" onClick={toggleFullscreen} className="text-white hover:bg-white/20">
+              {isFullscreen ? <Minimize className="h-4 w-4" /> : <Maximize className="h-4 w-4" />}
             </Button>
           </div>
         </div>

@@ -2,20 +2,20 @@
 
 import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
-import { ThumbsUp, ThumbsDown, Share2, MoreHorizontal, UserPlus, UserCheck } from "lucide-react"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { WatchLaterButton } from "./watch-later-button"
+import { Separator } from "@/components/ui/separator"
+import { Heart, MessageCircle, Eye, Share2, UserPlus, UserMinus, Calendar } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
-import { useAuth } from "./auth-provider"
-import { toast } from "@/hooks/use-toast" // Import toast from use-toast hook
+import { useToast } from "@/hooks/use-toast"
 
 interface VideoInfoProps {
   video: {
     id: string
     title: string
-    description: string
-    views: number
-    likes: number
+    description?: string
+    views?: number
+    likes?: number
+    comment_count?: number
     created_at: string
     user_id: string
     profiles: {
@@ -23,377 +23,314 @@ interface VideoInfoProps {
       username: string
       full_name?: string
       avatar_url?: string
+      bio?: string
     }
   }
 }
 
 export function VideoInfo({ video }: VideoInfoProps) {
-  const { user } = useAuth()
   const [isLiked, setIsLiked] = useState(false)
-  const [isDisliked, setIsDisliked] = useState(false)
   const [isSubscribed, setIsSubscribed] = useState(false)
-  const [likesCount, setLikesCount] = useState(0)
-  const [dislikesCount, setDislikesCount] = useState(0)
-  const [subscribersCount, setSubscribersCount] = useState(0)
-  const [loading, setLoading] = useState(false)
-  const supabase = createClient()
+  const [likeCount, setLikeCount] = useState(video?.likes || 0)
+  const [isLoading, setIsLoading] = useState(false)
+  const [currentUser, setCurrentUser] = useState<any>(null)
+  const { toast } = useToast()
+
+  // Safe access to video data
+  const videoData = {
+    id: video?.id || "",
+    title: video?.title || "Untitled Video",
+    description: video?.description || "",
+    views: video?.views || 0,
+    likes: video?.likes || 0,
+    comment_count: video?.comment_count || 0,
+    created_at: video?.created_at || new Date().toISOString(),
+    user_id: video?.user_id || "",
+    profiles: {
+      id: video?.profiles?.id || "",
+      username: video?.profiles?.username || "Unknown User",
+      full_name: video?.profiles?.full_name || "",
+      avatar_url: video?.profiles?.avatar_url || "",
+      bio: video?.profiles?.bio || "",
+    },
+  }
+
+  const formatNumber = (num: number | null | undefined): string => {
+    if (num === null || num === undefined || isNaN(num)) return "0"
+    if (num >= 1000000) return `${(num / 1000000).toFixed(1)}M`
+    if (num >= 1000) return `${(num / 1000).toFixed(1)}K`
+    return num.toString()
+  }
+
+  const formatDate = (dateString: string): string => {
+    try {
+      const date = new Date(dateString)
+      return date.toLocaleDateString("en-US", {
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+      })
+    } catch {
+      return "Unknown date"
+    }
+  }
 
   useEffect(() => {
-    if (user) {
-      checkUserInteractions()
-    }
-    fetchCounts()
-  }, [user, video.id])
+    const fetchUserData = async () => {
+      try {
+        const supabase = createClient()
+        const {
+          data: { user },
+        } = await supabase.auth.getUser()
 
-  const checkUserInteractions = async () => {
-    if (!user) return
+        if (user) {
+          setCurrentUser(user)
 
-    try {
-      // Check if user liked/disliked the video
-      const { data: likeData } = await supabase
-        .from("video_likes")
-        .select("is_like")
-        .eq("user_id", user.id)
-        .eq("video_id", video.id)
-        .single()
+          // Check if user has liked this video
+          const { data: likeData } = await supabase
+            .from("video_likes")
+            .select("is_like")
+            .eq("user_id", user.id)
+            .eq("video_id", videoData.id)
+            .single()
 
-      if (likeData) {
-        setIsLiked(likeData.is_like === true)
-        setIsDisliked(likeData.is_like === false)
+          if (likeData) {
+            setIsLiked(likeData.is_like)
+          }
+
+          // Check if user is subscribed to the video owner
+          if (videoData.profiles.id && videoData.profiles.id !== user.id) {
+            const { data: subData } = await supabase
+              .from("subscriptions")
+              .select("id")
+              .eq("subscriber_id", user.id)
+              .eq("channel_id", videoData.profiles.id)
+              .single()
+
+            setIsSubscribed(!!subData)
+          }
+        }
+      } catch (error) {
+        console.error("Error fetching user data:", error)
       }
-
-      // Check if user is subscribed to the channel
-      if (video.profiles?.id && video.profiles.id !== user.id) {
-        const { data: subData } = await supabase
-          .from("subscriptions")
-          .select("id")
-          .eq("subscriber_id", user.id)
-          .eq("channel_id", video.profiles.id)
-          .single()
-
-        setIsSubscribed(!!subData)
-      }
-    } catch (error) {
-      console.error("Error checking user interactions:", error)
     }
-  }
 
-  const fetchCounts = async () => {
-    try {
-      // Get likes count
-      const { count: likesCount } = await supabase
-        .from("video_likes")
-        .select("*", { count: "exact", head: true })
-        .eq("video_id", video.id)
-        .eq("is_like", true)
-
-      // Get dislikes count
-      const { count: dislikesCount } = await supabase
-        .from("video_likes")
-        .select("*", { count: "exact", head: true })
-        .eq("video_id", video.id)
-        .eq("is_like", false)
-
-      // Get subscribers count
-      const { count: subscribersCount } = await supabase
-        .from("subscriptions")
-        .select("*", { count: "exact", head: true })
-        .eq("channel_id", video.profiles?.id)
-
-      setLikesCount(likesCount || 0)
-      setDislikesCount(dislikesCount || 0)
-      setSubscribersCount(subscribersCount || 0)
-    } catch (error) {
-      console.error("Error fetching counts:", error)
+    if (videoData.id) {
+      fetchUserData()
     }
-  }
+  }, [videoData.id, videoData.profiles.id])
 
   const handleLike = async () => {
-    if (!user) {
-      toast({
-        title: "Sign in required",
-        description: "Please sign in to like videos",
-        variant: "destructive",
-      })
-      return
-    }
+    if (!currentUser || isLoading) return
 
-    setLoading(true)
+    setIsLoading(true)
     try {
-      if (isLiked) {
-        // Remove like
-        const { error } = await supabase.from("video_likes").delete().eq("user_id", user.id).eq("video_id", video.id)
+      const supabase = createClient()
+
+      // Check if like record exists
+      const { data: existingLike } = await supabase
+        .from("video_likes")
+        .select("is_like")
+        .eq("user_id", currentUser.id)
+        .eq("video_id", videoData.id)
+        .single()
+
+      if (existingLike) {
+        // Update existing record
+        const newLikeStatus = !existingLike.is_like
+        const { error } = await supabase
+          .from("video_likes")
+          .update({ is_like: newLikeStatus })
+          .eq("user_id", currentUser.id)
+          .eq("video_id", videoData.id)
 
         if (error) throw error
 
-        setIsLiked(false)
-        setLikesCount((prev) => Math.max(0, prev - 1))
+        setIsLiked(newLikeStatus)
+        setLikeCount((prev) => (newLikeStatus ? prev + 1 : prev - 1))
       } else {
-        // Add like or change from dislike to like
-        const { error } = await supabase.from("video_likes").upsert(
-          {
-            user_id: user.id,
-            video_id: video.id,
-            is_like: true,
-          },
-          {
-            onConflict: "user_id,video_id",
-          },
-        )
+        // Create new like record
+        const { error } = await supabase.from("video_likes").insert({
+          user_id: currentUser.id,
+          video_id: videoData.id,
+          is_like: true,
+        })
 
         if (error) throw error
 
-        if (isDisliked) {
-          setIsDisliked(false)
-          setDislikesCount((prev) => Math.max(0, prev - 1))
-        }
         setIsLiked(true)
-        setLikesCount((prev) => prev + (isDisliked ? 1 : 1))
+        setLikeCount((prev) => prev + 1)
       }
+
+      toast({
+        title: isLiked ? "Removed from liked videos" : "Added to liked videos",
+        description: isLiked ? "Video unliked successfully" : "Video liked successfully",
+      })
     } catch (error) {
       console.error("Error handling like:", error)
       toast({
         title: "Error",
-        description: "Failed to update like status",
+        description: "Failed to update like status. Please try again.",
         variant: "destructive",
       })
     } finally {
-      setLoading(false)
-    }
-  }
-
-  const handleDislike = async () => {
-    if (!user) {
-      toast({
-        title: "Sign in required",
-        description: "Please sign in to dislike videos",
-        variant: "destructive",
-      })
-      return
-    }
-
-    setLoading(true)
-    try {
-      if (isDisliked) {
-        // Remove dislike
-        const { error } = await supabase.from("video_likes").delete().eq("user_id", user.id).eq("video_id", video.id)
-
-        if (error) throw error
-
-        setIsDisliked(false)
-        setDislikesCount((prev) => Math.max(0, prev - 1))
-      } else {
-        // Add dislike or change from like to dislike
-        const { error } = await supabase.from("video_likes").upsert(
-          {
-            user_id: user.id,
-            video_id: video.id,
-            is_like: false,
-          },
-          {
-            onConflict: "user_id,video_id",
-          },
-        )
-
-        if (error) throw error
-
-        if (isLiked) {
-          setIsLiked(false)
-          setLikesCount((prev) => Math.max(0, prev - 1))
-        }
-        setIsDisliked(true)
-        setDislikesCount((prev) => prev + (isLiked ? 1 : 1))
-      }
-    } catch (error) {
-      console.error("Error handling dislike:", error)
-      toast({
-        title: "Error",
-        description: "Failed to update dislike status",
-        variant: "destructive",
-      })
-    } finally {
-      setLoading(false)
+      setIsLoading(false)
     }
   }
 
   const handleSubscribe = async () => {
-    if (!user) {
-      toast({
-        title: "Sign in required",
-        description: "Please sign in to subscribe to channels",
-        variant: "destructive",
-      })
-      return
-    }
+    if (!currentUser || isLoading || !videoData.profiles.id || videoData.profiles.id === currentUser.id) return
 
-    if (!video.profiles?.id) {
-      toast({
-        title: "Error",
-        description: "Cannot subscribe to this channel",
-        variant: "destructive",
-      })
-      return
-    }
-
-    if (video.profiles.id === user.id) {
-      toast({
-        title: "Error",
-        description: "You cannot subscribe to your own channel",
-        variant: "destructive",
-      })
-      return
-    }
-
-    setLoading(true)
+    setIsLoading(true)
     try {
+      const supabase = createClient()
+
       if (isSubscribed) {
         // Unsubscribe
         const { error } = await supabase
           .from("subscriptions")
           .delete()
-          .eq("subscriber_id", user.id)
-          .eq("channel_id", video.profiles.id)
+          .eq("subscriber_id", currentUser.id)
+          .eq("channel_id", videoData.profiles.id)
 
         if (error) throw error
-
         setIsSubscribed(false)
-        setSubscribersCount((prev) => Math.max(0, prev - 1))
+
         toast({
           title: "Unsubscribed",
-          description: `You unsubscribed from ${video.profiles.full_name || video.profiles.username}`,
+          description: `You unsubscribed from ${videoData.profiles.username}`,
         })
       } else {
         // Subscribe
         const { error } = await supabase.from("subscriptions").insert({
-          subscriber_id: user.id,
-          channel_id: video.profiles.id,
+          subscriber_id: currentUser.id,
+          channel_id: videoData.profiles.id,
         })
 
         if (error) throw error
-
         setIsSubscribed(true)
-        setSubscribersCount((prev) => prev + 1)
+
         toast({
           title: "Subscribed",
-          description: `You subscribed to ${video.profiles.full_name || video.profiles.username}`,
+          description: `You subscribed to ${videoData.profiles.username}`,
         })
       }
     } catch (error) {
       console.error("Error handling subscription:", error)
       toast({
         title: "Error",
-        description: "Failed to update subscription status",
+        description: "Failed to update subscription. Please try again.",
         variant: "destructive",
       })
     } finally {
-      setLoading(false)
+      setIsLoading(false)
     }
   }
 
-  const formatViews = (views: number) => {
-    if (views >= 1000000) {
-      return `${(views / 1000000).toFixed(1)}M`
-    } else if (views >= 1000) {
-      return `${(views / 1000).toFixed(1)}K`
+  const handleShare = async () => {
+    try {
+      if (navigator.share) {
+        await navigator.share({
+          title: videoData.title,
+          text: `Check out this video: ${videoData.title}`,
+          url: window.location.href,
+        })
+      } else {
+        await navigator.clipboard.writeText(window.location.href)
+        toast({
+          title: "Link copied",
+          description: "Video link copied to clipboard",
+        })
+      }
+    } catch (error) {
+      console.error("Error sharing:", error)
+      toast({
+        title: "Error",
+        description: "Failed to share video",
+        variant: "destructive",
+      })
     }
-    return views.toString()
-  }
-
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString)
-    return date.toLocaleDateString("en-US", {
-      year: "numeric",
-      month: "long",
-      day: "numeric",
-    })
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
+      {/* Video Title */}
       <div>
-        <h1 className="text-xl font-bold mb-2">{video.title}</h1>
-        <div className="flex items-center justify-between flex-wrap gap-4">
-          <div className="flex items-center gap-4 text-sm text-muted-foreground">
-            <span>{formatViews(video.views)} views</span>
-            <span>•</span>
-            <span>{formatDate(video.created_at)}</span>
+        <h1 className="text-2xl font-bold text-foreground mb-2">{videoData.title}</h1>
+        <div className="flex items-center gap-4 text-sm text-muted-foreground">
+          <div className="flex items-center gap-1">
+            <Eye className="w-4 h-4" />
+            <span>{formatNumber(videoData.views)} views</span>
           </div>
-
-          <div className="flex items-center gap-2">
-            <Button
-              onClick={handleLike}
-              disabled={loading}
-              variant={isLiked ? "default" : "outline"}
-              size="sm"
-              className="flex items-center space-x-2"
-            >
-              <ThumbsUp className={`w-4 h-4 ${isLiked ? "fill-current" : ""}`} />
-              <span>{likesCount}</span>
-            </Button>
-
-            <Button
-              onClick={handleDislike}
-              disabled={loading}
-              variant={isDisliked ? "default" : "outline"}
-              size="sm"
-              className="flex items-center space-x-2"
-            >
-              <ThumbsDown className={`w-4 h-4 ${isDisliked ? "fill-current" : ""}`} />
-              <span>{dislikesCount}</span>
-            </Button>
-
-            <WatchLaterButton videoId={video.id} />
-
-            <Button variant="outline" size="sm">
-              <Share2 className="w-4 h-4 mr-2" />
-              Share
-            </Button>
-
-            <Button variant="ghost" size="sm">
-              <MoreHorizontal className="w-4 h-4" />
-            </Button>
+          <div className="flex items-center gap-1">
+            <Calendar className="w-4 h-4" />
+            <span>{formatDate(videoData.created_at)}</span>
           </div>
         </div>
       </div>
 
+      {/* Action Buttons */}
       <div className="flex items-center justify-between">
-        <div className="flex items-center space-x-3">
-          <Avatar className="w-10 h-10">
-            <AvatarImage src={video.profiles?.avatar_url || "/placeholder.svg"} alt={video.profiles?.username} />
-            <AvatarFallback>{video.profiles?.username?.charAt(0).toUpperCase() || "U"}</AvatarFallback>
+        <div className="flex items-center gap-2">
+          <Button
+            variant={isLiked ? "default" : "outline"}
+            size="sm"
+            onClick={handleLike}
+            disabled={isLoading}
+            className="flex items-center gap-2"
+          >
+            <Heart className={`w-4 h-4 ${isLiked ? "fill-current" : ""}`} />
+            <span>{formatNumber(likeCount)}</span>
+          </Button>
+
+          <Button variant="outline" size="sm" className="flex items-center gap-2 bg-transparent">
+            <MessageCircle className="w-4 h-4" />
+            <span>{formatNumber(videoData.comment_count)}</span>
+          </Button>
+
+          <Button variant="outline" size="sm" onClick={handleShare} className="flex items-center gap-2 bg-transparent">
+            <Share2 className="w-4 h-4" />
+            <span>Share</span>
+          </Button>
+        </div>
+      </div>
+
+      <Separator />
+
+      {/* Channel Info */}
+      <div className="flex items-start justify-between">
+        <div className="flex items-center gap-3">
+          <Avatar className="w-12 h-12">
+            <AvatarImage src={videoData.profiles.avatar_url || "/placeholder.svg"} alt={videoData.profiles.username} />
+            <AvatarFallback>{videoData.profiles.username.charAt(0).toUpperCase()}</AvatarFallback>
           </Avatar>
           <div>
-            <p className="font-medium">{video.profiles?.full_name || video.profiles?.username || "Unknown User"}</p>
-            <p className="text-sm text-muted-foreground">{subscribersCount} subscribers</p>
+            <h3 className="font-semibold text-foreground">
+              {videoData.profiles.full_name || videoData.profiles.username}
+            </h3>
+            <p className="text-sm text-muted-foreground">@{videoData.profiles.username}</p>
+            {videoData.profiles.bio && <p className="text-sm text-muted-foreground mt-1">{videoData.profiles.bio}</p>}
           </div>
         </div>
 
-        {user && video.profiles?.id !== user.id && (
+        {currentUser && videoData.profiles.id !== currentUser.id && (
           <Button
-            onClick={handleSubscribe}
-            disabled={loading}
             variant={isSubscribed ? "outline" : "default"}
             size="sm"
+            onClick={handleSubscribe}
+            disabled={isLoading}
             className="flex items-center gap-2"
           >
-            {isSubscribed ? (
-              <>
-                <UserCheck className="w-4 h-4 mr-2" />
-                Subscribed
-              </>
-            ) : (
-              <>
-                <UserPlus className="w-4 h-4 mr-2" />
-                Subscribe
-              </>
-            )}
+            {isSubscribed ? <UserMinus className="w-4 h-4" /> : <UserPlus className="w-4 h-4" />}
+            <span>{isSubscribed ? "Unsubscribe" : "Subscribe"}</span>
           </Button>
         )}
       </div>
 
-      {video.description && (
-        <div className="bg-muted p-4 rounded-lg">
-          <p className="text-sm whitespace-pre-wrap">{video.description}</p>
+      {/* Video Description */}
+      {videoData.description && (
+        <div className="bg-muted/50 rounded-lg p-4">
+          <p className="text-sm text-foreground whitespace-pre-wrap">{videoData.description}</p>
         </div>
       )}
     </div>
